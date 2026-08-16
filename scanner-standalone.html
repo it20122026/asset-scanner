@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Asset Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root {
+      --navy: #1E2761;
+      --ice: #CADCFC;
+      --teal: #00B8A9;
+      --muted: #6B7280;
+      --bg: #F7F8FC;
+      --danger: #C0392B;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      color: #222;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 16px 18px;
+      text-align: center;
+    }
+    header h1 { margin: 0; font-size: 18px; }
+    header p { margin: 4px 0 0; color: var(--ice); font-size: 12px; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 14px; }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    #reader { width: 100%; border-radius: 8px; overflow: hidden; }
+
+    .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+    .manual-row input { flex: 1; padding: 10px; border: 1px solid #DADFEA; border-radius: 6px; font-size: 14px; }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      padding: 11px 16px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .btn-primary { background: var(--navy); color: #fff; width: 100%; }
+    .btn-accent { background: var(--teal); color: #fff; }
+    .btn-secondary { background: #EEF1FA; color: var(--navy); }
+    .btn-block { width: 100%; margin-top: 10px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #assetInfo { display: none; }
+    #assetInfo .code { font-size: 20px; font-weight: 700; color: var(--navy); }
+    #assetInfo .row { display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px; color: var(--muted); }
+    #assetInfo .row b { color: #222; }
+    .not-found { color: var(--danger); font-weight: 600; margin-top: 6px; font-size: 13px; }
+
+    .field { margin-top: 12px; }
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    select, input[type=text], textarea {
+      width: 100%; padding: 9px; border: 1px solid #DADFEA; border-radius: 6px; font-size: 14px;
+    }
+    .status-toggle { display: flex; gap: 8px; margin-top: 4px; }
+    .status-toggle button {
+      flex: 1; background: #EEF1FA; color: var(--navy); border: 2px solid transparent;
+    }
+    .status-toggle button.active { border-color: var(--navy); background: var(--ice); }
+
+    #toast {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: var(--navy); color: #fff; padding: 10px 18px; border-radius: 20px;
+      font-size: 13px; display: none; z-index: 999; max-width: 90%; text-align: center;
+    }
+    #toast.err { background: var(--danger); }
+
+    #setupNotice {
+      background: #FEF3E2; border: 1px solid #F0C674; color: #7A5B10;
+      border-radius: 8px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Asset Scanner</h1>
+    <p>Scan a label, confirm details, and log the audit</p>
+  </header>
+
+  <div class="wrap">
+    <div id="setupNotice">
+      ⚠️ Set your Apps Script Web App URL in the <code>WEBAPP_URL</code> constant near the top of the &lt;script&gt; tag before using this page.
+    </div>
+
+    <div class="card">
+      <div id="reader"></div>
+      <div class="manual-row">
+        <input type="text" id="manualCode" placeholder="Or type asset code manually">
+        <button class="btn-accent" onclick="lookupManual()">Go</button>
+      </div>
+    </div>
+
+    <div class="card" id="assetInfo">
+      <div class="code" id="infoCode">-</div>
+      <div id="foundBlock">
+        <div class="row"><span>Category</span><b id="infoCategory">-</b></div>
+        <div class="row"><span>Registered Location</span><b id="infoLocation">-</b></div>
+        <div class="row"><span>Last Audited</span><b id="infoLastAudited">-</b></div>
+      </div>
+      <div class="not-found" id="notFoundMsg" style="display:none;">
+        This code was not found in Asset Sheet. You can still log the scan below.
+      </div>
+
+      <div class="field">
+        <label>Action</label>
+        <div class="status-toggle">
+          <button type="button" id="btnAudited" onclick="setStatus('Audited')">Audited</button>
+          <button type="button" id="btnAck" onclick="setStatus('Acknowledged')">Acknowledged</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Current Location</label>
+        <input type="text" id="scanLocation" list="locList" placeholder="Where is this asset right now?">
+        <datalist id="locList"></datalist>
+      </div>
+
+      <div class="field">
+        <label>Remarks (optional)</label>
+        <textarea id="remarks" rows="2" placeholder="Any notes about condition, discrepancy, etc."></textarea>
+      </div>
+
+      <button class="btn-primary btn-block" id="submitBtn" onclick="submitScan()">Save to Scanner Log</button>
+      <button class="btn-secondary btn-block" onclick="resetScan()">Scan Next Asset</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    /* ============================================================
+       REQUIRED: paste your Apps Script Web App URL below.
+       Get it from: Apps Script editor > Deploy > Manage deployments
+       It ends in /exec — do NOT add ?page=scanner to this one.
+       ============================================================ */
+    var WEBAPP_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+    var currentCode = null;
+    var currentStatus = null;
+    var html5QrCode;
+
+    if (!WEBAPP_URL || WEBAPP_URL.indexOf('PASTE_YOUR') === 0) {
+      document.getElementById('setupNotice').style.display = 'block';
+    }
+
+    function callApi(action, extra) {
+      var payload = Object.assign({ action: action }, extra || {});
+      return fetch(WEBAPP_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }).then(function (res) { return res.json(); });
+    }
+
+    function toast(msg, isErr) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = isErr ? 'err' : '';
+      t.style.display = 'block';
+      setTimeout(function () { t.style.display = 'none'; }, 3000);
+    }
+
+    function startScanner() {
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 220 },
+        function (decodedText) {
+          html5QrCode.pause(true);
+          handleScannedCode(decodedText);
+        },
+        function () { /* ignore per-frame scan errors */ }
+      ).catch(function (err) {
+        toast('Camera unavailable — use manual entry below.', true);
+      });
+    }
+
+    function lookupManual() {
+      var val = document.getElementById('manualCode').value.trim();
+      if (!val) return;
+      if (html5QrCode) { try { html5QrCode.pause(true); } catch (e) {} }
+      handleScannedCode(val);
+    }
+
+    function handleScannedCode(code) {
+      currentCode = code;
+      currentStatus = null;
+      document.getElementById('btnAudited').classList.remove('active');
+      document.getElementById('btnAck').classList.remove('active');
+      document.getElementById('remarks').value = '';
+
+      callApi('getAssetInfo', { code: code })
+        .then(function (info) {
+          document.getElementById('infoCode').textContent = info.code || code;
+          if (info.found) {
+            document.getElementById('foundBlock').style.display = 'block';
+            document.getElementById('notFoundMsg').style.display = 'none';
+            document.getElementById('infoCategory').textContent = info.category || '-';
+            document.getElementById('infoLocation').textContent = info.location || '-';
+            document.getElementById('infoLastAudited').textContent = info.lastAudited || 'Never';
+          } else {
+            document.getElementById('foundBlock').style.display = 'none';
+            document.getElementById('notFoundMsg').style.display = 'block';
+          }
+          document.getElementById('assetInfo').style.display = 'block';
+        })
+        .catch(function (err) { toast('Lookup error: ' + err.message, true); });
+    }
+
+    function setStatus(s) {
+      currentStatus = s;
+      document.getElementById('btnAudited').classList.toggle('active', s === 'Audited');
+      document.getElementById('btnAck').classList.toggle('active', s === 'Acknowledged');
+    }
+
+    function submitScan() {
+      if (!currentCode) return;
+      if (!currentStatus) { toast('Choose Audited or Acknowledged first.', true); return; }
+
+      var payload = {
+        code: currentCode,
+        status: currentStatus,
+        location: document.getElementById('scanLocation').value.trim(),
+        remarks: document.getElementById('remarks').value.trim()
+      };
+
+      document.getElementById('submitBtn').disabled = true;
+      callApi('logScan', { payload: payload })
+        .then(function (res) {
+          document.getElementById('submitBtn').disabled = false;
+          toast(res.message || 'Saved.');
+          resetScan();
+        })
+        .catch(function (err) {
+          document.getElementById('submitBtn').disabled = false;
+          toast('Error: ' + err.message, true);
+        });
+    }
+
+    function resetScan() {
+      currentCode = null;
+      currentStatus = null;
+      document.getElementById('assetInfo').style.display = 'none';
+      document.getElementById('manualCode').value = '';
+      document.getElementById('scanLocation').value = '';
+      if (html5QrCode) {
+        try { html5QrCode.resume(); } catch (e) {}
+      }
+    }
+
+    function loadLocations() {
+      callApi('getLists')
+        .then(function (lists) {
+          var dl = document.getElementById('locList');
+          dl.innerHTML = (lists.locations || []).map(function (l) { return '<option value="' + l + '">'; }).join('');
+        })
+        .catch(function () { /* non-critical */ });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      startScanner();
+      loadLocations();
+    });
+  </script>
+</body>
+</html>
