@@ -151,15 +151,15 @@
        Get it from: Apps Script editor > Deploy > Manage deployments
        It ends in /exec — do NOT add ?page=scanner to this one.
        ============================================================ */
-    var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyZu4JzFRDYrag2vtQWa-x-VI_j1DdsSZEkv7Gk-kLoymNoLW_05jA_i8glpGpPOLT8-A/exec
-
-';
+    var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyZu4JzFRDYrag2vtQWa-x-VI_j1DdsSZEkv7Gk-kLoymNoLW_05jA_i8glpGpPOLT8-A/exec';
 
     var currentCode = null;
     var currentStatus = null;
     var html5QrCode;
 
-    if (!WEBAPP_URL || WEBAPP_URL.indexOf('PASTE_YOUR') === 0) {
+    if (!WEBAPP_URL || WEBAPP_URL.indexOf('https://script.google.com/macros/s/AKfycbyZu4JzFRDYrag2vtQWa-x-VI_j1DdsSZEkv7Gk-kLoymNoLW_05jA_i8glpGpPOLT8-A/exec
+
+') === 0) {
       document.getElementById('setupNotice').style.display = 'block';
     }
 
